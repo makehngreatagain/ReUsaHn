@@ -1,0 +1,60 @@
+rules_version = '2';
+
+// Reglas de Firebase Storage para ReUsa Honduras
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Función para verificar si el usuario está autenticado
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Función para verificar si el usuario es admin
+    function isAdmin() {
+      return request.auth != null &&
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Imágenes de publicaciones (posts)
+    match /posts/{postId}/{allPaths=**} {
+      allow read: if true; // Permitir lectura pública para que los admins puedan ver
+      allow write: if isAuthenticated(); // Solo usuarios autenticados pueden subir
+      allow delete: if isAdmin(); // Solo admins pueden eliminar
+    }
+
+    // Imágenes de árboles
+    match /trees/{treeId}/{allPaths=**} {
+      allow read: if true; // Permitir lectura pública
+      allow write: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Imágenes de retos/evidencias
+    match /challenges/{challengeId}/{allPaths=**} {
+      allow read: if true; // Permitir lectura pública
+      allow write: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+
+    // Imágenes de recompensas
+    match /rewards/{rewardId}/{allPaths=**} {
+      allow read: if true; // Permitir lectura pública
+      allow write: if isAdmin(); // Solo admins pueden subir recompensas
+      allow delete: if isAdmin();
+    }
+
+    // Imágenes de perfil de usuarios
+    match /users/{userId}/{allPaths=**} {
+      allow read: if true; // Permitir lectura pública
+      allow write: if isAuthenticated() && request.auth.uid == userId; // Solo el usuario dueño
+      allow delete: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Otras imágenes generales
+    match /{allPaths=**} {
+      allow read: if true; // Permitir lectura pública de todas las imágenes
+      allow write: if isAuthenticated();
+      allow delete: if isAdmin();
+    }
+  }
+}

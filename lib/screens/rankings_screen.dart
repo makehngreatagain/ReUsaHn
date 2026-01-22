@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../models/user_ranking_model.dart';
+import '../models/user_model.dart';
+import '../services/user_service.dart';
 import '../utils/colors.dart';
-import '../utils/rankings_data.dart';
 
 class RankingsScreen extends StatefulWidget {
   const RankingsScreen({super.key});
@@ -11,22 +11,64 @@ class RankingsScreen extends StatefulWidget {
 }
 
 class _RankingsScreenState extends State<RankingsScreen> {
-  List<UserRankingModel> rankings = [];
-
-  @override
-  void initState() {
-    super.initState();
-    rankings = List.from(RankingsData.rankings);
-    // Ordenar por puntos de mayor a menor
-    rankings.sort((a, b) => b.greenPoints.compareTo(a.greenPoints));
-  }
+  final UserService _userService = UserService();
 
   @override
   Widget build(BuildContext context) {
-    final top3 = rankings.take(3).toList();
-    final remaining = rankings.skip(3).toList();
+    return StreamBuilder<List<UserModel>>(
+      stream: _userService.getTopUsers(limit: 50),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              title: const Text(
+                'Usuarios Más Ecológicos',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              centerTitle: true,
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
 
-    return Scaffold(
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            appBar: AppBar(
+              title: const Text(
+                'Usuarios Más Ecológicos',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              centerTitle: true,
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error al cargar rankings',
+                    style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final rankings = snapshot.data ?? [];
+        final top3 = rankings.take(3).toList();
+        final remaining = rankings.skip(3).toList();
+
+        return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
@@ -91,8 +133,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
             if (top3.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SizedBox(
-                  height: 240,
+                child: IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -102,7 +143,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                           child: _buildPodiumPlace(
                             user: top3[1],
                             position: 2,
-                            height: 150,
+                            height: 130,
                             color: Colors.grey[400]!,
                           ),
                         ),
@@ -112,7 +153,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                         child: _buildPodiumPlace(
                           user: top3[0],
                           position: 1,
-                          height: 190,
+                          height: 160,
                           color: Colors.amber[400]!,
                         ),
                       ),
@@ -123,7 +164,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
                           child: _buildPodiumPlace(
                             user: top3[2],
                             position: 3,
-                            height: 120,
+                            height: 100,
                             color: Colors.brown[400]!,
                           ),
                         ),
@@ -174,11 +215,13 @@ class _RankingsScreenState extends State<RankingsScreen> {
           ],
         ),
       ),
+        );
+      },
     );
   }
 
   Widget _buildPodiumPlace({
-    required UserRankingModel user,
+    required UserModel user,
     required int position,
     required double height,
     required Color color,
@@ -198,8 +241,8 @@ class _RankingsScreenState extends State<RankingsScreen> {
       children: [
         // Avatar
         Container(
-          width: 45,
-          height: 45,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: Colors.grey[300],
@@ -211,7 +254,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
           child: user.profileImageUrl.isEmpty
               ? Icon(
                   Icons.person,
-                  size: 24,
+                  size: 20,
                   color: Colors.grey[600],
                 )
               : ClipOval(
@@ -221,14 +264,14 @@ class _RankingsScreenState extends State<RankingsScreen> {
                   ),
                 ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         // Nombre
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
           child: Text(
             user.name.split(' ')[0], // Solo el primer nombre
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: FontWeight.bold,
               color: AppColors.textPrimary,
             ),
@@ -245,21 +288,21 @@ class _RankingsScreenState extends State<RankingsScreen> {
           children: [
             Icon(
               Icons.eco,
-              size: 11,
+              size: 10,
               color: AppColors.primary,
             ),
             const SizedBox(width: 2),
             Text(
               '${user.greenPoints}',
               style: const TextStyle(
-                fontSize: 9,
+                fontSize: 8,
                 fontWeight: FontWeight.bold,
                 color: AppColors.primary,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         // Podio
         Container(
           width: double.infinity,
@@ -283,14 +326,14 @@ class _RankingsScreenState extends State<RankingsScreen> {
             children: [
               Icon(
                 positionIcon,
-                size: 36,
+                size: 32,
                 color: Colors.white,
               ),
               const SizedBox(height: 2),
               Text(
                 '#$position',
                 style: const TextStyle(
-                  fontSize: 18,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
                 ),
@@ -302,7 +345,7 @@ class _RankingsScreenState extends State<RankingsScreen> {
     );
   }
 
-  Widget _buildRankingCard(UserRankingModel user, int position) {
+  Widget _buildRankingCard(UserModel user, int position) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 1,

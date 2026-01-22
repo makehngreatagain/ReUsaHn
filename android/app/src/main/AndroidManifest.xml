@@ -9,6 +9,9 @@
     <!-- Permiso para flutter_map (cargar tiles del mapa) -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Permisos para notificaciones push -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <application
         android:label="prueba_android"
         android:name="${applicationName}"

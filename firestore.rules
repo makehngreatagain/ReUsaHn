@@ -1,0 +1,211 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Función helper para verificar autenticación
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Función helper para verificar si el usuario es administrador
+    function isAdmin() {
+      return isAuthenticated() &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Función helper para verificar si es el dueño del recurso
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ============================================
+    // COLECCIÓN: users
+    // ============================================
+    match /users/{userId} {
+      // Lectura: cualquier usuario autenticado puede leer perfiles
+      allow read: if isAuthenticated();
+
+      // Escritura: solo el dueño puede actualizar su propio perfil
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
+    // COLECCIÓN: posts (publicaciones)
+    // ============================================
+    match /posts/{postId} {
+      // Lectura: usuarios autenticados
+      allow read: if isAuthenticated();
+
+      // Creación: usuarios autenticados
+      allow create: if isAuthenticated();
+
+      // Actualización: dueño o admin
+      allow update: if isAuthenticated() &&
+                       (resource.data.userId == request.auth.uid || isAdmin());
+
+      // Eliminación: dueño o admin
+      allow delete: if isAuthenticated() &&
+                       (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // ============================================
+    // COLECCIÓN: chats
+    // ============================================
+    match /chats/{chatId} {
+      // Lectura/escritura: solo participantes del chat
+      allow read, write: if isAuthenticated() &&
+                            request.auth.uid in resource.data.participantIds;
+
+      // Creación: usuario autenticado
+      allow create: if isAuthenticated();
+
+      // Mensajes dentro del chat
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // ============================================
+    // COLECCIÓN: exchanges (intercambios)
+    // ============================================
+    match /exchanges/{exchangeId} {
+      // Lectura: participantes del intercambio
+      allow read: if isAuthenticated() &&
+                     (request.auth.uid == resource.data.user1Id ||
+                      request.auth.uid == resource.data.user2Id ||
+                      isAdmin());
+
+      // Creación: usuarios autenticados
+      allow create: if isAuthenticated();
+
+      // Actualización: participantes o admin
+      allow update: if isAuthenticated() &&
+                       (request.auth.uid == resource.data.user1Id ||
+                        request.auth.uid == resource.data.user2Id ||
+                        isAdmin());
+
+      // Eliminación: solo admin
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
+    // COLECCIÓN: challenges (retos)
+    // ============================================
+    match /challenges/{challengeId} {
+      // Lectura: todos los usuarios autenticados
+      allow read: if isAuthenticated();
+
+      // Escritura: solo administradores
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ============================================
+    // COLECCIÓN: challenge_completions
+    // ============================================
+    match /challenge_completions/{completionId} {
+      // Lectura: el usuario dueño o admin
+      allow read: if isAuthenticated() &&
+                     (request.auth.uid == resource.data.userId || isAdmin());
+
+      // Creación: usuario autenticado
+      allow create: if isAuthenticated();
+
+      // Actualización: dueño o admin
+      allow update: if isAuthenticated() &&
+                       (request.auth.uid == resource.data.userId || isAdmin());
+
+      // Eliminación: solo admin
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
+    // COLECCIÓN: green_zones (zonas verdes)
+    // ============================================
+    match /green_zones/{zoneId} {
+      // Lectura: todos los usuarios autenticados
+      allow read: if isAuthenticated();
+
+      // Escritura: solo administradores
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ============================================
+    // COLECCIÓN: tree_plantings (plantación de árboles)
+    // ============================================
+    match /tree_plantings/{plantingId} {
+      // Lectura: todos los usuarios autenticados
+      allow read: if isAuthenticated();
+
+      // Creación: usuarios autenticados
+      allow create: if isAuthenticated();
+
+      // Actualización: dueño o admin
+      allow update: if isAuthenticated() &&
+                       (request.auth.uid == resource.data.userId || isAdmin());
+
+      // Eliminación: dueño o admin
+      allow delete: if isAuthenticated() &&
+                       (request.auth.uid == resource.data.userId || isAdmin());
+    }
+
+    // ============================================
+    // COLECCIÓN: rewards (recompensas)
+    // ============================================
+    match /rewards/{rewardId} {
+      // Lectura: todos los usuarios autenticados
+      allow read: if isAuthenticated();
+
+      // Escritura: solo administradores
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ============================================
+    // COLECCIÓN: reward_redemptions (canjes)
+    // ============================================
+    match /reward_redemptions/{redemptionId} {
+      // Lectura: el usuario dueño o admin
+      allow read: if isAuthenticated() &&
+                     (request.auth.uid == resource.data.userId || isAdmin());
+
+      // Creación: usuario autenticado
+      allow create: if isAuthenticated();
+
+      // Actualización: dueño o admin
+      allow update: if isAuthenticated() &&
+                       (request.auth.uid == resource.data.userId || isAdmin());
+
+      // Eliminación: solo admin
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
+    // COLECCIÓN: notifications (notificaciones)
+    // ============================================
+    match /notifications/{notificationId} {
+      // Lectura: el usuario dueño
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
+
+      // Creación: cualquier usuario autenticado o Cloud Functions
+      allow create: if isAuthenticated();
+
+      // Actualización: el usuario dueño (para marcar como leído)
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
+
+      // Eliminación: el usuario dueño
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    // ============================================
+    // COLECCIÓN: articles (legacy - si existe)
+    // ============================================
+    match /articles/{articleId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated() &&
+                               (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}

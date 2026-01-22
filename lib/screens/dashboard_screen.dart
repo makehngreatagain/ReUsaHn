@@ -1,19 +1,51 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../utils/colors.dart';
 import 'publications_screen.dart';
 import 'chats_screen.dart';
 import 'mapa_verde_screen.dart';
 import 'rewards_store_screen.dart';
 import 'rankings_screen.dart';
+import 'challenges_screen.dart';
+import 'profile_screen.dart';
+import 'admin_posts_screen.dart';
+import 'init_challenges_screen.dart';
+import 'init_green_zones_screen.dart';
+import 'admin_trees_screen.dart';
+import 'admin_rewards_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // Por ahora nombre hardcodeado, luego vendrá del login
-    const String userName = 'Usuario Actual';
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
 
+class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isAdmin = false;
+  String _userName = 'Usuario';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserData();
+  }
+
+  Future<void> _loadUserData() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final userData = await authService.getCurrentUserData();
+
+    if (mounted && userData != null) {
+      setState(() {
+        _userName = userData.name;
+        _isAdmin = userData.isAdmin;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -27,6 +59,34 @@ class DashboardScreen extends StatelessWidget {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          if (_isAdmin)
+            IconButton(
+              icon: const Icon(Icons.admin_panel_settings),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AdminPostsScreen(),
+                  ),
+                );
+              },
+              tooltip: 'Panel de Administración',
+            ),
+          IconButton(
+            icon: const Icon(Icons.account_circle),
+            iconSize: 32,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ProfileScreen(),
+                ),
+              );
+            },
+            tooltip: 'Mi Perfil',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -34,7 +94,7 @@ class DashboardScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Bienvenido, $userName!',
+              'Bienvenido, $_userName!',
               style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -42,12 +102,34 @@ class DashboardScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Selecciona una sección para comenzar',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppColors.textSecondary,
-              ),
+            Row(
+              children: [
+                const Text(
+                  'Selecciona una sección para comenzar',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                if (_isAdmin) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'ADMIN',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
             const SizedBox(height: 32),
             Expanded(
@@ -101,22 +183,22 @@ class DashboardScreen extends StatelessWidget {
                   _DashboardCard(
                     title: 'Retos',
                     subtitle: 'Desafíos ecológicos',
-                    icon: Icons.eco,
-                    color: const Color(0xFF8BC34A),
+                    icon: Icons.emoji_events,
+                    color: const Color(0xFFFF9800),
                     onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Retos - Próximamente'),
-                          duration: Duration(seconds: 2),
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ChallengesScreen(),
                         ),
                       );
                     },
                   ),
                   _DashboardCard(
-                    title: 'Rankings',
-                    subtitle: 'Top usuarios ecológicos',
+                    title: 'Ranking',
+                    subtitle: 'Clasificación de usuarios',
                     icon: Icons.leaderboard,
-                    color: const Color(0xFFFFB300),
+                    color: const Color(0xFF9C27B0),
                     onTap: () {
                       Navigator.push(
                         context,
@@ -129,8 +211,8 @@ class DashboardScreen extends StatelessWidget {
                   _DashboardCard(
                     title: 'Tienda de Recompensas',
                     subtitle: 'Canjea tus puntos',
-                    icon: Icons.card_giftcard,
-                    color: const Color(0xFF9C27B0),
+                    icon: Icons.store,
+                    color: const Color(0xFFE91E63),
                     onTap: () {
                       Navigator.push(
                         context,
@@ -140,6 +222,65 @@ class DashboardScreen extends StatelessWidget {
                       );
                     },
                   ),
+                  // Tarjetas especiales para admins
+                  if (_isAdmin) ...[
+                    _DashboardCard(
+                      title: 'Inicializar Retos',
+                      subtitle: 'Cargar retos de ejemplo',
+                      icon: Icons.settings_backup_restore,
+                      color: const Color(0xFF607D8B),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const InitChallengesScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _DashboardCard(
+                      title: 'Inicializar Zonas Verdes',
+                      subtitle: 'Cargar zonas del mapa',
+                      icon: Icons.add_location_alt,
+                      color: const Color(0xFF4CAF50),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const InitGreenZonesScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _DashboardCard(
+                      title: 'Gestión de Árboles',
+                      subtitle: 'Revisar árboles plantados',
+                      icon: Icons.park,
+                      color: const Color(0xFF66BB6A),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AdminTreesScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _DashboardCard(
+                      title: 'Gestión de Recompensas',
+                      subtitle: 'Administrar tienda',
+                      icon: Icons.card_giftcard,
+                      color: const Color(0xFFE91E63),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AdminRewardsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -168,7 +309,7 @@ class _DashboardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      elevation: 3,
+      elevation: 4,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
@@ -190,34 +331,35 @@ class _DashboardCard extends StatelessWidget {
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
                 icon,
-                size: 44,
+                size: 40,
                 color: Colors.white,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               Text(
                 title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.white.withValues(alpha: 0.9),
                 ),
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

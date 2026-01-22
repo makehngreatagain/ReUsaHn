@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/reward_model.dart';
+import '../services/auth_service.dart';
+import '../services/rewards_service.dart';
 import '../utils/colors.dart';
-import '../utils/rewards_data.dart';
 
 class RewardsStoreScreen extends StatefulWidget {
   const RewardsStoreScreen({super.key});
@@ -11,76 +13,29 @@ class RewardsStoreScreen extends StatefulWidget {
 }
 
 class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
-  // Puntos de los Usuarios
-  int userPoints = 0;
+  final RewardsService _rewardsService = RewardsService();
   RewardCategory? _selectedCategory;
-  List<RewardModel> filteredRewards = [];
+  int _userPoints = 0;
 
   @override
   void initState() {
     super.initState();
-    filteredRewards = RewardsData.rewards;
+    _loadUserPoints();
   }
 
-  void _filterRewards() {
-    setState(() {
-      if (_selectedCategory == null) {
-        filteredRewards = RewardsData.rewards;
-      } else {
-        filteredRewards = RewardsData.rewards
-            .where((reward) => reward.category == _selectedCategory)
-            .toList();
-      }
-    });
+  Future<void> _loadUserPoints() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final userData = await authService.getCurrentUserData();
+    if (mounted && userData != null) {
+      setState(() {
+        _userPoints = userData.greenPoints;
+      });
+    }
   }
 
-  void _redeemReward(RewardModel reward) {
-    if (userPoints >= reward.pointsCost && reward.stock > 0) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Canjear Recompensa'),
-          content: Text(
-            '¿Deseas canjear "${reward.name}" por ${reward.pointsCost} puntos verdes?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  userPoints -= reward.pointsCost;
-                  // Aquí se actualizaría el stock en una base de datos real
-                });
-                Navigator.pop(context);
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Row(
-                      children: [
-                        const Icon(Icons.check_circle, color: Colors.white),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text('¡Recompensa canjeada! Te quedan $userPoints puntos'),
-                        ),
-                      ],
-                    ),
-                    backgroundColor: AppColors.primary,
-                    duration: const Duration(seconds: 3),
-                  ),
-                );
-              },
-              child: const Text(
-                'Canjear',
-                style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      );
-    } else if (userPoints < reward.pointsCost) {
+  void _redeemReward(RewardModel reward) async {
+    if (_userPoints < reward.pointsCost) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Row(
@@ -94,7 +49,11 @@ class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
           duration: Duration(seconds: 3),
         ),
       );
-    } else {
+      return;
+    }
+
+    if (reward.stock <= 0) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Row(
@@ -106,6 +65,85 @@ class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
           ),
           backgroundColor: Colors.orange,
           duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    // Mostrar diálogo de confirmación con campos adicionales
+    if (!mounted) return;
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => _RedeemRewardDialog(reward: reward),
+    );
+
+    if (result == null || !mounted) return;
+
+    // Mostrar indicador de carga
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final user = authService.currentUser;
+      final userData = await authService.getCurrentUserData();
+
+      await _rewardsService.redeemReward(
+        userId: user!.uid,
+        userName: userData!.name,
+        userEmail: userData.email,
+        rewardId: reward.id,
+        rewardName: reward.name,
+        pointsCost: reward.pointsCost,
+        deliveryAddress: result['address'],
+        phoneNumber: result['phone'],
+        notes: result['notes'],
+      );
+
+      // Recargar puntos del usuario
+      await _loadUserPoints();
+
+      if (!mounted) return;
+      Navigator.pop(context); // Cerrar indicador de carga
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '¡Recompensa canjeada! Te quedan $_userPoints puntos. '
+                  'Recibirás una notificación cuando sea aprobada.',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: AppColors.primary,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context); // Cerrar indicador de carga
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Error: ${e.toString()}')),
+            ],
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -157,14 +195,14 @@ class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.eco,
                       color: Colors.white,
                       size: 32,
                     ),
                     const SizedBox(width: 12),
                     Text(
-                      '$userPoints',
+                      '$_userPoints',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 42,
@@ -194,7 +232,6 @@ class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
                       onSelected: (selected) {
                         setState(() {
                           _selectedCategory = null;
-                          _filterRewards();
                         });
                       },
                       backgroundColor: Colors.grey[200],
@@ -220,7 +257,6 @@ class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
                         onSelected: (selected) {
                           setState(() {
                             _selectedCategory = selected ? category : null;
-                            _filterRewards();
                           });
                         },
                         backgroundColor: Colors.grey[200],
@@ -242,8 +278,36 @@ class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
 
           // Lista de recompensas
           Expanded(
-            child: filteredRewards.isEmpty
-                ? Center(
+            child: StreamBuilder<List<RewardModel>>(
+              stream: _rewardsService.getActiveRewards(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline,
+                            size: 64, color: Colors.red),
+                        const SizedBox(height: 16),
+                        Text('Error: ${snapshot.error}'),
+                      ],
+                    ),
+                  );
+                }
+
+                final allRewards = snapshot.data ?? [];
+                final filteredRewards = _selectedCategory == null
+                    ? allRewards
+                    : allRewards
+                        .where((r) => r.category == _selectedCategory)
+                        .toList();
+
+                if (filteredRewards.isEmpty) {
+                  return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -254,7 +318,7 @@ class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No hay recompensas en esta categoría',
+                          'No hay recompensas disponibles',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey[600],
@@ -262,155 +326,279 @@ class _RewardsStoreScreenState extends State<RewardsStoreScreen> {
                         ),
                       ],
                     ),
-                  )
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      childAspectRatio: 0.75,
-                    ),
-                    itemCount: filteredRewards.length,
-                    itemBuilder: (context, index) {
-                      final reward = filteredRewards[index];
-                      final canAfford = userPoints >= reward.pointsCost;
-                      final hasStock = reward.stock > 0;
+                  );
+                }
 
-                      return Card(
-                        elevation: 3,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: InkWell(
-                          onTap: canAfford && hasStock
-                              ? () => _redeemReward(reward)
-                              : null,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Imagen del producto
-                              Expanded(
-                                child: Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[200],
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(12),
-                                      topRight: Radius.circular(12),
-                                    ),
+                return GridView.builder(
+                  padding: const EdgeInsets.all(16),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: 0.75,
+                  ),
+                  itemCount: filteredRewards.length,
+                  itemBuilder: (context, index) {
+                    final reward = filteredRewards[index];
+                    final canAfford = _userPoints >= reward.pointsCost;
+                    final hasStock = reward.stock > 0;
+
+                    return Card(
+                      elevation: 3,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: InkWell(
+                        onTap: canAfford && hasStock
+                            ? () => _redeemReward(reward)
+                            : null,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Imagen del producto
+                            Expanded(
+                              child: Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[200],
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(12),
+                                    topRight: Radius.circular(12),
                                   ),
-                                  child: reward.imageUrl.isEmpty
-                                      ? Icon(
-                                          Icons.card_giftcard,
-                                          size: 48,
-                                          color: Colors.grey[400],
-                                        )
-                                      : ClipRRect(
-                                          borderRadius: const BorderRadius.only(
-                                            topLeft: Radius.circular(12),
-                                            topRight: Radius.circular(12),
-                                          ),
-                                          child: Image.network(
-                                            reward.imageUrl,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
                                 ),
-                              ),
-
-                              // Información del producto
-                              Padding(
-                                padding: const EdgeInsets.all(10),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Nombre
-                                    Text(
-                                      reward.name,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.textPrimary,
+                                child: reward.imageUrl.isEmpty
+                                    ? Icon(
+                                        Icons.card_giftcard,
+                                        size: 48,
+                                        color: Colors.grey[400],
+                                      )
+                                    : ClipRRect(
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(12),
+                                          topRight: Radius.circular(12),
+                                        ),
+                                        child: Image.network(
+                                          reward.imageUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                            return Icon(
+                                              Icons.card_giftcard,
+                                              size: 48,
+                                              color: Colors.grey[400],
+                                            );
+                                          },
+                                        ),
                                       ),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 6),
+                              ),
+                            ),
 
-                                    // Stock
-                                    Row(
-                                      children: [
-                                        Icon(
-                                          Icons.inventory_2,
-                                          size: 12,
+                            // Información del producto
+                            Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Nombre
+                                  Text(
+                                    reward.name,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 6),
+
+                                  // Stock
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.inventory_2,
+                                        size: 12,
+                                        color: hasStock
+                                            ? AppColors.primary
+                                            : Colors.red,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        hasStock
+                                            ? 'Stock: ${reward.stock}'
+                                            : 'Agotado',
+                                        style: TextStyle(
+                                          fontSize: 10,
                                           color: hasStock
-                                              ? AppColors.primary
+                                              ? AppColors.textSecondary
                                               : Colors.red,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+
+                                  // Puntos
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: canAfford && hasStock
+                                          ? AppColors.primary
+                                          : Colors.grey,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.eco,
+                                          size: 12,
+                                          color: Colors.white,
                                         ),
                                         const SizedBox(width: 4),
                                         Text(
-                                          hasStock
-                                              ? 'Stock: ${reward.stock}'
-                                              : 'Agotado',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: hasStock
-                                                ? AppColors.textSecondary
-                                                : Colors.red,
+                                          '${reward.pointsCost}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
                                           ),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 6),
-
-                                    // Puntos
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: canAfford && hasStock
-                                            ? AppColors.primary
-                                            : Colors.grey,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(
-                                            Icons.eco,
-                                            size: 12,
-                                            color: Colors.white,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${reward.pointsCost}',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RedeemRewardDialog extends StatefulWidget {
+  final RewardModel reward;
+
+  const _RedeemRewardDialog({required this.reward});
+
+  @override
+  State<_RedeemRewardDialog> createState() => _RedeemRewardDialogState();
+}
+
+class _RedeemRewardDialogState extends State<_RedeemRewardDialog> {
+  final _addressController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _notesController = TextEditingController();
+
+  @override
+  void dispose() {
+    _addressController.dispose();
+    _phoneController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Canjear Recompensa'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '¿Deseas canjear "${widget.reward.name}" por ${widget.reward.pointsCost} puntos verdes?',
+            ),
+            const SizedBox(height: 16),
+            Text(
+              widget.reward.description,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _addressController,
+              decoration: const InputDecoration(
+                labelText: 'Dirección de entrega *',
+                hintText: 'Ej: Col. Kennedy, Tegucigalpa',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phoneController,
+              decoration: const InputDecoration(
+                labelText: 'Teléfono de contacto *',
+                hintText: 'Ej: 9999-9999',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.phone,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesController,
+              decoration: const InputDecoration(
+                labelText: 'Notas adicionales (opcional)',
+                hintText: 'Ej: Horario preferido de entrega',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 2,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        TextButton(
+          onPressed: () {
+            if (_addressController.text.trim().isEmpty ||
+                _phoneController.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Por favor completa los campos requeridos'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+              return;
+            }
+
+            Navigator.pop(context, {
+              'address': _addressController.text.trim(),
+              'phone': _phoneController.text.trim(),
+              'notes': _notesController.text.trim(),
+            });
+          },
+          child: const Text(
+            'Confirmar',
+            style: TextStyle(
+              color: AppColors.primary,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

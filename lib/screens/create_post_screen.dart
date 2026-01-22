@@ -1,9 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../models/user_model.dart';
+import 'package:provider/provider.dart';
 import '../models/article_model.dart';
 import '../models/post_model.dart';
+import '../services/auth_service.dart';
+import '../services/post_service.dart';
+import '../services/storage_service.dart';
 import '../utils/colors.dart';
 
 class CreatePostScreen extends StatefulWidget {
@@ -20,10 +23,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final List<String> _suggestions = [];
   final _suggestionController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
+  final _postService = PostService();
+  final _storageService = StorageService();
 
   File? _selectedImage;
-  String? _selectedImagePath;
   ArticleCategory _selectedCategory = ArticleCategory.otros;
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -45,7 +50,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       if (image != null) {
         setState(() {
           _selectedImage = File(image.path);
-          _selectedImagePath = image.path;
         });
       }
     } catch (e) {
@@ -72,7 +76,6 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       if (image != null) {
         setState(() {
           _selectedImage = File(image.path);
-          _selectedImagePath = image.path;
         });
       }
     } catch (e) {
@@ -143,39 +146,94 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     });
   }
 
-  void _createPost() {
-    if (_formKey.currentState!.validate()) {
-      if (_suggestions.isEmpty) {
+  Future<void> _createPost() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_suggestions.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Agrega al menos una sugerencia de intercambio'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Por favor selecciona una imagen del artículo'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Obtener usuario actual
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final currentUser = await authService.getCurrentUserData();
+
+      if (currentUser == null) {
+        throw Exception('No se pudo obtener los datos del usuario');
+      }
+
+      // Subir imagen a Firebase Storage
+      final imageUrl = await _storageService.uploadArticleImage(
+        _selectedImage!,
+        currentUser.id,
+      );
+
+      // Crear el artículo
+      final article = ArticleModel(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: _titleController.text.trim(),
+        description: _descriptionController.text.trim(),
+        imageUrl: imageUrl,
+        interestedInExchangeFor: _suggestions,
+        category: _selectedCategory,
+      );
+
+      // Crear el post
+      final newPost = PostModel(
+        id: '',
+        userId: currentUser.id,
+        user: currentUser,
+        article: article,
+        status: PostStatus.pending,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      // Guardar en Firestore
+      await _postService.createPost(newPost);
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Agrega al menos una sugerencia de intercambio'),
+            content: Text('Publicación creada exitosamente. Está pendiente de aprobación.'),
+            backgroundColor: AppColors.primary,
+            duration: Duration(seconds: 3),
+          ),
+        );
+
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al crear publicación: ${e.toString()}'),
             backgroundColor: AppColors.error,
           ),
         );
-        return;
       }
-
-      // Crear el nuevo post
-      final newPost = PostModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        user: UserModel(
-          id: 'current_user',
-          name: 'Usuario Actual', // Aquí irá el usuario logueado
-          profileImageUrl: '',
-        ),
-        article: ArticleModel(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: _titleController.text.trim(),
-          description: _descriptionController.text.trim(),
-          imageUrl: _selectedImagePath ?? 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800',
-          interestedInExchangeFor: _suggestions,
-          category: _selectedCategory,
-        ),
-        createdAt: DateTime.now(),
-      );
-
-      // Devolver el post a la pantalla anterior
-      Navigator.pop(context, newPost);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -441,7 +499,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
             SizedBox(
               height: 50,
               child: ElevatedButton(
-                onPressed: _createPost,
+                onPressed: _isLoading ? null : _createPost,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -450,13 +508,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Publicar',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Publicar',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
             ),
           ],

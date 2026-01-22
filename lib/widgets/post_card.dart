@@ -66,12 +66,14 @@ class PostCard extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            // Imagen del artículo
+            // Imagen del artículo con badge de disponibilidad
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: _isLocalImage(post.article.imageUrl)
+              child: Stack(
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: _isLocalImage(post.article.imageUrl)
                     ? Image.file(
                         File(post.article.imageUrl),
                         fit: BoxFit.cover,
@@ -113,6 +115,50 @@ class PostCard extends StatelessWidget {
                           );
                         },
                       ),
+                  ),
+                  // Badge de disponibilidad
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: post.article.isAvailable
+                            ? Colors.green.withValues(alpha: 0.9)
+                            : Colors.red.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            post.article.isAvailable
+                                ? Icons.check_circle
+                                : Icons.cancel,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            post.article.isAvailable ? 'Disponible' : 'Intercambiado',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
 

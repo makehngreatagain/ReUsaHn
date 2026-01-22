@@ -10,6 +10,7 @@ class RewardsData {
       imageUrl: '',
       stock: 25,
       category: RewardCategory.educational,
+      createdAt: DateTime.now(),
     ),
     RewardModel(
       id: 'reward2',
@@ -19,6 +20,7 @@ class RewardsData {
       imageUrl: '',
       stock: 15,
       category: RewardCategory.plants,
+      createdAt: DateTime.now(),
     ),
     RewardModel(
       id: 'reward3',
@@ -28,6 +30,7 @@ class RewardsData {
       imageUrl: '',
       stock: 20,
       category: RewardCategory.merchandise,
+      createdAt: DateTime.now(),
     ),
     RewardModel(
       id: 'reward4',
@@ -37,6 +40,7 @@ class RewardsData {
       imageUrl: '',
       stock: 30,
       category: RewardCategory.merchandise,
+      createdAt: DateTime.now(),
     ),
     RewardModel(
       id: 'reward5',
@@ -46,6 +50,7 @@ class RewardsData {
       imageUrl: '',
       stock: 40,
       category: RewardCategory.ecofriendly,
+      createdAt: DateTime.now(),
     ),
     RewardModel(
       id: 'reward6',
@@ -55,6 +60,7 @@ class RewardsData {
       imageUrl: '',
       stock: 35,
       category: RewardCategory.educational,
+      createdAt: DateTime.now(),
     ),
   ];
 }

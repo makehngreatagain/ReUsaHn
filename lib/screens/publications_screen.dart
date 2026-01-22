@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/post_model.dart';
 import '../models/article_model.dart';
+import '../services/post_service.dart';
 import '../utils/colors.dart';
-import '../utils/dummy_data.dart';
 import '../widgets/post_card.dart';
 import 'create_post_screen.dart';
 
@@ -13,20 +13,38 @@ class PublicationsScreen extends StatefulWidget {
   State<PublicationsScreen> createState() => _PublicationsScreenState();
 }
 
+enum SortOption {
+  newest('Más reciente'),
+  oldest('Más antiguo'),
+  titleAZ('Título A-Z'),
+  titleZA('Título Z-A');
+
+  final String displayName;
+  const SortOption(this.displayName);
+}
+
+enum AvailabilityFilter {
+  all('Todos'),
+  available('Disponibles'),
+  exchanged('Intercambiados');
+
+  final String displayName;
+  const AvailabilityFilter(this.displayName);
+}
+
 class _PublicationsScreenState extends State<PublicationsScreen> {
-  List<PostModel> posts = [];
-  List<PostModel> filteredPosts = [];
+  final PostService _postService = PostService();
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   ArticleCategory? _selectedCategory;
+  AvailabilityFilter _availabilityFilter = AvailabilityFilter.all;
+  SortOption _sortOption = SortOption.newest;
   bool _isExpanded = true;
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    // Inicializar con los posts de prueba
-    posts = List.from(DummyData.posts);
-    filteredPosts = List.from(posts);
 
     // Escuchar el scroll para minimizar/expandir la barra
     _scrollController.addListener(() {
@@ -40,6 +58,13 @@ class _PublicationsScreenState extends State<PublicationsScreen> {
         });
       }
     });
+
+    // Escuchar cambios en el campo de búsqueda
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.toLowerCase();
+      });
+    });
   }
 
   @override
@@ -49,103 +74,54 @@ class _PublicationsScreenState extends State<PublicationsScreen> {
     super.dispose();
   }
 
-  void _filterPosts() {
-    setState(() {
-      filteredPosts = posts.where((post) {
-        // Filtrar por búsqueda
-        final matchesSearch = _searchController.text.isEmpty ||
-            post.article.title.toLowerCase().contains(_searchController.text.toLowerCase()) ||
-            post.article.description.toLowerCase().contains(_searchController.text.toLowerCase());
+  List<PostModel> _filterAndSortPosts(List<PostModel> posts) {
+    // Primero filtrar
+    var filtered = posts.where((post) {
+      // Filtrar por búsqueda
+      final matchesSearch = _searchQuery.isEmpty ||
+          post.article.title.toLowerCase().contains(_searchQuery) ||
+          post.article.description.toLowerCase().contains(_searchQuery);
 
-        // Filtrar por categoría
-        final matchesCategory = _selectedCategory == null || post.article.category == _selectedCategory;
+      // Filtrar por categoría
+      final matchesCategory = _selectedCategory == null || post.article.category == _selectedCategory;
 
-        return matchesSearch && matchesCategory;
-      }).toList();
-    });
+      // Filtrar por disponibilidad
+      final matchesAvailability = _availabilityFilter == AvailabilityFilter.all ||
+          (_availabilityFilter == AvailabilityFilter.available && post.article.isAvailable) ||
+          (_availabilityFilter == AvailabilityFilter.exchanged && !post.article.isAvailable);
+
+      return matchesSearch && matchesCategory && matchesAvailability;
+    }).toList();
+
+    // Luego ordenar
+    switch (_sortOption) {
+      case SortOption.newest:
+        filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+      case SortOption.oldest:
+        filtered.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        break;
+      case SortOption.titleAZ:
+        filtered.sort((a, b) => a.article.title.toLowerCase().compareTo(b.article.title.toLowerCase()));
+        break;
+      case SortOption.titleZA:
+        filtered.sort((a, b) => b.article.title.toLowerCase().compareTo(a.article.title.toLowerCase()));
+        break;
+    }
+
+    return filtered;
   }
 
   void _navigateToCreatePost() async {
-    final newPost = await Navigator.push<PostModel>(
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => const CreatePostScreen(),
       ),
     );
 
-    if (newPost != null) {
-      setState(() {
-        // Agregar el nuevo post al inicio de la lista
-        posts.insert(0, newPost);
-        // También agregar a DummyData para que persista
-        DummyData.posts.insert(0, newPost);
-        // Refiltrar los posts
-        _filterPosts();
-      });
-
-      // Mostrar mensaje de éxito
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Text('¡Publicación creada exitosamente!'),
-              ],
-            ),
-            backgroundColor: AppColors.primary,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    }
-  }
-
-  void _deletePost(PostModel post) {
-    // Mostrar diálogo de confirmación
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Eliminar publicación'),
-        content: const Text('¿Estás seguro de que quieres eliminar esta publicación?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                posts.remove(post);
-                DummyData.posts.remove(post);
-                _filterPosts();
-              });
-              Navigator.pop(context);
-
-              // Mostrar mensaje de éxito
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.white),
-                      SizedBox(width: 12),
-                      Text('¡Publicación eliminada exitosamente!'),
-                    ],
-                  ),
-                  backgroundColor: Colors.red,
-                  duration: Duration(seconds: 3),
-                ),
-              );
-            },
-            child: const Text(
-              'Eliminar',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
-    );
+    // El CreatePostScreen ya muestra su propio mensaje de éxito
+    // No necesitamos hacer nada aquí porque el StreamBuilder se actualizará automáticamente
   }
 
   @override
@@ -154,7 +130,7 @@ class _PublicationsScreenState extends State<PublicationsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text(
-          'Mercado de Intercambios',
+          'Publicaciones',
           style: TextStyle(
             fontWeight: FontWeight.bold,
           ),
@@ -164,188 +140,339 @@ class _PublicationsScreenState extends State<PublicationsScreen> {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _navigateToCreatePost,
+        backgroundColor: AppColors.primary,
+        icon: const Icon(Icons.add),
+        label: const Text('Nueva Publicación'),
+      ),
       body: Column(
         children: [
           // Barra de búsqueda y filtros
           AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            color: AppColors.primary,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                // Barra de búsqueda - siempre visible pero más pequeña cuando está minimizada
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  child: TextField(
-                    controller: _searchController,
-                    style: const TextStyle(color: Colors.black87),
-                    decoration: InputDecoration(
-                      hintText: 'Buscar artículos...',
-                      prefixIcon: const Icon(Icons.search, color: AppColors.primary),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, color: AppColors.primary),
-                              onPressed: () {
-                                _searchController.clear();
-                                _filterPosts();
-                              },
-                            )
-                          : IconButton(
-                              icon: Icon(
-                                _isExpanded ? Icons.expand_less : Icons.expand_more,
-                                color: AppColors.primary,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _isExpanded = !_isExpanded;
-                                });
-                              },
-                            ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: _isExpanded ? 16 : 12,
-                        horizontal: 16,
-                      ),
-                    ),
-                    onChanged: (value) => _filterPosts(),
-                  ),
-                ),
-                // Filtros y botón - se ocultan cuando está minimizado
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeInOut,
-                  child: _isExpanded
-                      ? Column(
-                          children: [
-                            const SizedBox(height: 12),
-                            // Filtro de categorías
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: [
-                                  // Opción "Todas"
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 8),
-                                    child: FilterChip(
-                                      label: const Text('Todas'),
-                                      selected: _selectedCategory == null,
-                                      onSelected: (selected) {
-                                        setState(() {
-                                          _selectedCategory = null;
-                                          _filterPosts();
-                                        });
-                                      },
-                                      backgroundColor: Colors.white.withValues(alpha: 0.3),
-                                      selectedColor: Colors.white,
-                                      labelStyle: TextStyle(
-                                        color: _selectedCategory == null ? AppColors.primary : Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                      side: BorderSide(
-                                        color: Colors.white.withValues(alpha: 0.5),
-                                        width: 1,
-                                      ),
-                                    ),
-                                  ),
-                                  // Categorías
-                                  ...ArticleCategory.values.map((category) {
-                                    final isSelected = _selectedCategory == category;
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: FilterChip(
-                                        label: Text(category.displayName),
-                                        selected: isSelected,
-                                        onSelected: (selected) {
-                                          setState(() {
-                                            _selectedCategory = selected ? category : null;
-                                            _filterPosts();
-                                          });
-                                        },
-                                        backgroundColor: Colors.white.withValues(alpha: 0.3),
-                                        selectedColor: Colors.white,
-                                        labelStyle: TextStyle(
-                                          color: isSelected ? AppColors.primary : Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                        side: BorderSide(
-                                          color: Colors.white.withValues(alpha: 0.5),
-                                          width: 1,
-                                        ),
-                                      ),
-                                    );
-                                  }),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            // Botón de nueva publicación
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton.icon(
-                                onPressed: _navigateToCreatePost,
-                                icon: const Icon(Icons.add),
-                                label: const Text('Nueva Publicación'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: AppColors.primary,
-                                  elevation: 0,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
+            duration: const Duration(milliseconds: 200),
+            padding: EdgeInsets.all(_isExpanded ? 16 : 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Barra de búsqueda
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar publicaciones...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: AppColors.background,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+                if (_isExpanded) ...[
+                  const SizedBox(height: 12),
+                  // Filtro por disponibilidad y ordenamiento
+                  Row(
+                    children: [
+                      // Filtro de disponibilidad
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<AvailabilityFilter>(
+                              value: _availabilityFilter,
+                              isExpanded: true,
+                              icon: const Icon(Icons.filter_list, size: 20),
+                              items: AvailabilityFilter.values.map((filter) {
+                                return DropdownMenuItem(
+                                  value: filter,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        filter == AvailabilityFilter.all
+                                            ? Icons.view_list
+                                            : filter == AvailabilityFilter.available
+                                                ? Icons.check_circle
+                                                : Icons.check_circle_outline,
+                                        size: 18,
+                                        color: AppColors.primary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        filter.displayName,
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    _availabilityFilter = value;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Ordenamiento
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<SortOption>(
+                              value: _sortOption,
+                              isExpanded: true,
+                              icon: const Icon(Icons.sort, size: 20),
+                              items: SortOption.values.map((sort) {
+                                return DropdownMenuItem(
+                                  value: sort,
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        sort == SortOption.newest || sort == SortOption.oldest
+                                            ? Icons.access_time
+                                            : Icons.sort_by_alpha,
+                                        size: 18,
+                                        color: AppColors.primary,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          sort.displayName,
+                                          style: const TextStyle(fontSize: 14),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() {
+                                    _sortOption = value;
+                                  });
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Filtro por categoría
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        FilterChip(
+                          label: const Text('Todas'),
+                          selected: _selectedCategory == null,
+                          onSelected: (selected) {
+                            setState(() {
+                              _selectedCategory = null;
+                            });
+                          },
+                          backgroundColor: Colors.white,
+                          selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                        ),
+                        const SizedBox(width: 8),
+                        ...ArticleCategory.values.map((category) {
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(category.displayName),
+                              selected: _selectedCategory == category,
+                              onSelected: (selected) {
+                                setState(() {
+                                  _selectedCategory = selected ? category : null;
+                                });
+                              },
+                              backgroundColor: Colors.white,
+                              selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                ] else if (_selectedCategory != null) ...[
+                  // Mostrar categoría seleccionada cuando está colapsado
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        FilterChip(
+                          label: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_selectedCategory!.displayName),
+                              const SizedBox(width: 4),
+                              const Icon(Icons.close, size: 16),
+                            ],
+                          ),
+                          selected: true,
+                          onSelected: (selected) {
+                            setState(() {
+                              _selectedCategory = null;
+                            });
+                          },
+                          backgroundColor: Colors.white,
+                          selectedColor: AppColors.primary.withValues(alpha: 0.2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-          // Lista de posts filtrados
+
+          // Lista de publicaciones con StreamBuilder
           Expanded(
-            child: filteredPosts.isEmpty
-                ? Center(
+            child: StreamBuilder<List<PostModel>>(
+              stream: _postService.getApprovedPosts(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.search_off,
+                          Icons.error_outline,
                           size: 64,
                           color: Colors.grey[400],
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No se encontraron artículos',
+                          'Error al cargar publicaciones',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey[600],
                           ),
                         ),
+                        const SizedBox(height: 8),
+                        Text(
+                          snapshot.error.toString(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[500],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
-                  )
-                : ListView.builder(
+                  );
+                }
+
+                final allPosts = snapshot.data ?? [];
+                final filteredPosts = _filterAndSortPosts(allPosts);
+
+                if (filteredPosts.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.inbox_outlined,
+                          size: 64,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          allPosts.isEmpty
+                              ? 'No hay publicaciones todavía'
+                              : 'No se encontraron publicaciones',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          allPosts.isEmpty
+                              ? 'Sé el primero en publicar un artículo'
+                              : 'Intenta con otros filtros de búsqueda',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        if (allPosts.isEmpty)
+                          ElevatedButton.icon(
+                            onPressed: _navigateToCreatePost,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Crear Publicación'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }
+
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    // El StreamBuilder se actualiza automáticamente
+                    await Future.delayed(const Duration(milliseconds: 500));
+                  },
+                  child: ListView.builder(
                     controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
                     itemCount: filteredPosts.length,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
                     itemBuilder: (context, index) {
-                      final post = filteredPosts[index];
-                      return PostCard(
-                        post: post,
-                        onDelete: () => _deletePost(post),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: PostCard(post: filteredPosts[index]),
                       );
                     },
                   ),
+                );
+              },
+            ),
           ),
         ],
       ),
