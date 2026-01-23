@@ -163,10 +163,17 @@ class TreePlantingService {
       // Después de la transacción, completar retos activos de tipo plantTree
       await _completeTreePlantingChallenges(userId, photoUrl);
 
-      // Enviar notificación al usuario
+      // Crear notificación en el buzón
+      await _notificationService.createTreeNotification(
+        userId: userId,
+        pointsEarned: 50,
+        treeId: treeId,
+      );
+
+      // También enviar notificación push
       await _notificationService.sendNotificationToUser(
         userId: userId,
-        title: '¡Árbol Aprobado! 🌳',
+        title: '¡Árbol Aprobado!',
         body: 'Tu árbol plantado ha sido aprobado. Has ganado 50 puntos verdes.',
         type: 'tree_approved',
         data: {'treeId': treeId},

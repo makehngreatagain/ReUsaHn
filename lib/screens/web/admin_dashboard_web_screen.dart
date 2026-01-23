@@ -8,6 +8,7 @@ import 'admin_rewards_web_screen.dart';
 import 'admin_stats_web_screen.dart';
 import 'admin_challenges_web_screen.dart';
 import 'admin_users_web_screen.dart';
+import 'admin_tickets_web_screen.dart';
 import 'admin_login_web_screen.dart';
 
 class AdminDashboardWebScreen extends StatefulWidget {
@@ -53,6 +54,11 @@ class _AdminDashboardWebScreenState extends State<AdminDashboardWebScreen> {
       label: 'Recompensas',
       index: 5,
     ),
+    _NavigationItem(
+      icon: Icons.support_agent,
+      label: 'Soporte',
+      index: 6,
+    ),
   ];
 
   Widget _getSelectedScreen() {
@@ -69,6 +75,8 @@ class _AdminDashboardWebScreenState extends State<AdminDashboardWebScreen> {
         return const AdminChallengesWebScreen();
       case 5:
         return const AdminRewardsWebScreen();
+      case 6:
+        return const AdminTicketsWebScreen();
       default:
         return const AdminStatsWebScreen();
     }

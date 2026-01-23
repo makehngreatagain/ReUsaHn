@@ -46,29 +46,28 @@ class _PublicationsScreenState extends State<PublicationsScreen> {
   void initState() {
     super.initState();
 
-    // Escuchar el scroll para minimizar/expandir la barra
-    _scrollController.addListener(() {
-      if (_scrollController.offset > 50 && _isExpanded) {
-        setState(() {
-          _isExpanded = false;
-        });
-      } else if (_scrollController.offset <= 50 && !_isExpanded) {
-        setState(() {
-          _isExpanded = true;
-        });
-      }
-    });
+    // Escuchar cambios en el campo de búsqueda con debounce
+    _searchController.addListener(_onSearchChanged);
+  }
 
-    // Escuchar cambios en el campo de búsqueda
-    _searchController.addListener(() {
+  void _onSearchChanged() {
+    final newQuery = _searchController.text.toLowerCase();
+    if (_searchQuery != newQuery) {
       setState(() {
-        _searchQuery = _searchController.text.toLowerCase();
+        _searchQuery = newQuery;
       });
+    }
+  }
+
+  void _toggleFilters() {
+    setState(() {
+      _isExpanded = !_isExpanded;
     });
   }
 
   @override
   void dispose() {
+    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -165,23 +164,46 @@ class _PublicationsScreenState extends State<PublicationsScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Barra de búsqueda
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Buscar publicaciones...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
+                // Barra de búsqueda con botón de filtros
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Buscar publicaciones...',
+                          prefixIcon: const Icon(Icons.search),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          filled: true,
+                          fillColor: AppColors.background,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Botón para mostrar/ocultar filtros
+                    Material(
+                      color: AppColors.background,
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                      child: InkWell(
+                        onTap: _toggleFilters,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          child: Icon(
+                            _isExpanded ? Icons.expand_less : Icons.expand_more,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
                     ),
-                    filled: true,
-                    fillColor: AppColors.background,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
+                  ],
                 ),
                 if (_isExpanded) ...[
                   const SizedBox(height: 12),

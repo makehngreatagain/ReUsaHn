@@ -8,6 +8,8 @@ import '../services/user_service.dart';
 import '../utils/colors.dart';
 import 'edit_profile_screen.dart';
 import 'login_screen.dart';
+import 'notifications_screen.dart';
+import 'support_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -620,30 +622,32 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
             ),
             const SizedBox(height: 8),
 
-            // Botón de notificaciones (placeholder)
+            // Botón de soporte
             _buildSettingsOption(
-              icon: Icons.notifications,
-              title: 'Notificaciones',
-              subtitle: 'Gestiona tus notificaciones',
+              icon: Icons.support_agent,
+              title: 'Soporte',
+              subtitle: 'Abre un ticket de ayuda',
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Próximamente disponible'),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SupportScreen(),
                   ),
                 );
               },
             ),
             const SizedBox(height: 8),
 
-            // Botón de privacidad (placeholder)
+            // Botón de notificaciones (buzón)
             _buildSettingsOption(
-              icon: Icons.privacy_tip,
-              title: 'Privacidad',
-              subtitle: 'Configuración de privacidad',
+              icon: Icons.notifications,
+              title: 'Notificaciones',
+              subtitle: 'Ver tus logros y actualizaciones',
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Próximamente disponible'),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const NotificationsScreen(),
                   ),
                 );
               },

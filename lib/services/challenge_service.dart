@@ -3,10 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/challenge_model.dart';
 import '../models/challenge_completion_model.dart';
 import 'storage_service.dart';
+import 'notification_service.dart';
 
 class ChallengeService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final StorageService _storageService = StorageService();
+  final NotificationService _notificationService = NotificationService();
 
   // ============ GESTIÓN DE RETOS (PLANTILLAS) ============
 
@@ -309,6 +311,8 @@ class ChallengeService {
     required int pointsReward,
   }) async {
     try {
+      String challengeId = '';
+
       // Usar transacción para asegurar consistencia
       await _firestore.runTransaction((transaction) async {
         // Obtener el progreso del reto
@@ -323,6 +327,8 @@ class ChallengeService {
           completionDoc.data()!,
           completionDoc.id,
         );
+
+        challengeId = completion.challengeId;
 
         // Verificar que esté aprobado y no reclamado
         if (completion.status != CompletionStatus.approved) {
@@ -348,6 +354,26 @@ class ChallengeService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       });
+
+      // Obtener el título del reto para la notificación
+      String challengeTitle = 'Reto';
+      if (challengeId.isNotEmpty) {
+        final challengeDoc = await _firestore
+            .collection('challenges')
+            .doc(challengeId)
+            .get();
+        if (challengeDoc.exists) {
+          challengeTitle = challengeDoc.data()?['title'] as String? ?? 'Reto';
+        }
+      }
+
+      // Crear notificación en el buzón
+      await _notificationService.createChallengeNotification(
+        userId: userId,
+        challengeTitle: challengeTitle,
+        pointsEarned: pointsReward,
+        challengeId: challengeId,
+      );
     } catch (e) {
       throw Exception('Error al reclamar puntos: ${e.toString()}');
     }

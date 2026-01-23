@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/reward_model.dart';
 import '../models/reward_redemption_model.dart';
+import 'notification_service.dart';
 
 class RewardsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
 
   // Obtener todas las recompensas activas
   Stream<List<RewardModel>> getActiveRewards() {
@@ -244,12 +246,33 @@ class RewardsService {
   Future<void> approveRedemption(String redemptionId, String adminId,
       {String? notes}) async {
     try {
+      // Obtener datos del canje antes de actualizar
+      final redemptionDoc = await _firestore
+          .collection('reward_redemptions')
+          .doc(redemptionId)
+          .get();
+
       await _firestore.collection('reward_redemptions').doc(redemptionId).update({
         'status': 'approved',
         'processedAt': FieldValue.serverTimestamp(),
         'processedBy': adminId,
         if (notes != null) 'notes': notes,
       });
+
+      // Crear notificación en el buzón
+      if (redemptionDoc.exists) {
+        final data = redemptionDoc.data()!;
+        final userId = data['userId'] as String;
+        final rewardName = data['rewardName'] as String? ?? 'Recompensa';
+        final pointsSpent = data['pointsSpent'] as int? ?? 0;
+
+        await _notificationService.createRewardNotification(
+          userId: userId,
+          rewardName: rewardName,
+          pointsUsed: pointsSpent,
+          redemptionId: redemptionId,
+        );
+      }
     } catch (e) {
       throw Exception('Error al aprobar canje: ${e.toString()}');
     }

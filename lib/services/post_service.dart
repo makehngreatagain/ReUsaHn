@@ -124,15 +124,25 @@ class PostService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // Aquí se podría enviar una notificación al usuario
+      // Enviar notificación al usuario
       final postDoc = await _firestore.collection('posts').doc(postId).get();
       final postData = postDoc.data();
       if (postData != null) {
         final userId = postData['userId'] as String;
+        final postTitle = postData['title'] as String? ?? 'Sin título';
+
+        // Crear notificación en el buzón
+        await _notificationService.createPublicationNotification(
+          userId: userId,
+          postTitle: postTitle,
+          postId: postId,
+        );
+
+        // También enviar notificación push
         await _createNotification(
           userId: userId,
           title: 'Publicación Aprobada',
-          message: 'Tu publicación ha sido aprobada y ahora es visible para todos.',
+          message: 'Tu publicación "$postTitle" ha sido aprobada y ahora es visible para todos.',
           type: 'post_approved',
           relatedId: postId,
         );
