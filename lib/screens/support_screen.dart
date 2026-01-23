@@ -576,12 +576,46 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   final SupportTicketService _ticketService = SupportTicketService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
   bool _isSending = false;
+  SupportTicketModel? _ticket;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTicket();
+  }
+
+  void _loadTicket() {
+    _ticketService.getTicket(widget.ticketId).listen((ticket) {
+      if (mounted) {
+        setState(() {
+          _ticket = ticket;
+          _isLoading = false;
+        });
+
+        // Auto scroll cuando hay nuevos mensajes
+        if (ticket != null && _scrollController.hasClients) {
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (_scrollController.hasClients) {
+              _scrollController.animateTo(
+                _scrollController.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            }
+          });
+        }
+      }
+    });
+  }
 
   @override
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -604,17 +638,6 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       );
 
       _messageController.clear();
-
-      // Scroll al final
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -633,200 +656,196 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<SupportTicketModel?>(
-      stream: _ticketService.getTicket(widget.ticketId),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('Cargando...'),
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-            body: const Center(child: CircularProgressIndicator()),
-          );
-        }
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Cargando...'),
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
-        final ticket = snapshot.data;
+    final ticket = _ticket;
 
-        if (ticket == null) {
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text('Ticket no encontrado'),
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-            ),
-            body: const Center(
-              child: Text('El ticket no existe'),
-            ),
-          );
-        }
+    if (ticket == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Ticket no encontrado'),
+          backgroundColor: AppColors.primary,
+          foregroundColor: Colors.white,
+        ),
+        body: const Center(
+          child: Text('El ticket no existe'),
+        ),
+      );
+    }
 
-        final isClosed = ticket.status == TicketStatus.closed;
+    final isClosed = ticket.status == TicketStatus.closed;
 
-        return Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(
-            title: Text(
-              'Ticket #${ticket.id.substring(0, 8)}',
-              style: const TextStyle(fontWeight: FontWeight.bold),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text(
+          'Ticket #${ticket.id.substring(0, 8)}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          // Info del ticket
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            color: Colors.white,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        ticket.subject,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    _buildStatusChip(ticket.status),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(Icons.category, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      ticket.category.displayName,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatDate(ticket.createdAt),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
           ),
-          body: Column(
-            children: [
-              // Info del ticket
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
+
+          // Mensajes
+          Expanded(
+            child: ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              children: [
+                // Descripción original
+                _buildMessageBubble(
+                  message: ticket.description,
+                  senderName: ticket.userName,
+                  timestamp: ticket.createdAt,
+                  isAdmin: false,
+                  isOriginal: true,
+                ),
+
+                // Mensajes de la conversación
+                ...ticket.messages.map((msg) => _buildMessageBubble(
+                      message: msg.message,
+                      senderName: msg.senderName,
+                      timestamp: msg.timestamp,
+                      isAdmin: msg.isAdmin,
+                    )),
+              ],
+            ),
+          ),
+
+          // Input de mensaje
+          if (!isClosed)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
                 color: Colors.white,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            ticket.subject,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
-                          ),
-                        ),
-                        _buildStatusChip(ticket.status),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Icon(Icons.category, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Text(
-                          ticket.category.displayName,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDate(ticket.createdAt),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
               ),
-
-              // Mensajes
-              Expanded(
-                child: ListView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    // Descripción original
-                    _buildMessageBubble(
-                      message: ticket.description,
-                      senderName: ticket.userName,
-                      timestamp: ticket.createdAt,
-                      isAdmin: false,
-                      isOriginal: true,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      focusNode: _focusNode,
+                      decoration: InputDecoration(
+                        hintText: 'Escribe un mensaje...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: AppColors.background,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                      ),
+                      maxLines: null,
                     ),
-
-                    // Mensajes de la conversación
-                    ...ticket.messages.map((msg) => _buildMessageBubble(
-                          message: msg.message,
-                          senderName: msg.senderName,
-                          timestamp: msg.timestamp,
-                          isAdmin: msg.isAdmin,
-                        )),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: AppColors.primary,
+                    child: IconButton(
+                      onPressed: _isSending ? null : _sendMessage,
+                      icon: _isSending
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.send, color: Colors.white),
+                    ),
+                  ),
+                ],
               ),
-
-              // Input de mensaje
-              if (!isClosed)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.grey[200],
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.lock, size: 18, color: Colors.grey),
+                  SizedBox(width: 8),
+                  Text(
+                    'Este ticket está cerrado',
+                    style: TextStyle(color: Colors.grey),
                   ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _messageController,
-                          decoration: InputDecoration(
-                            hintText: 'Escribe un mensaje...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(24),
-                              borderSide: BorderSide.none,
-                            ),
-                            filled: true,
-                            fillColor: AppColors.background,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 12,
-                            ),
-                          ),
-                          maxLines: null,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      CircleAvatar(
-                        backgroundColor: AppColors.primary,
-                        child: IconButton(
-                          onPressed: _isSending ? null : _sendMessage,
-                          icon: _isSending
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.send, color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  color: Colors.grey[200],
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.lock, size: 18, color: Colors.grey),
-                      SizedBox(width: 8),
-                      Text(
-                        'Este ticket está cerrado',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 

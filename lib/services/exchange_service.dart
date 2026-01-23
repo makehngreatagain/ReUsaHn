@@ -109,12 +109,18 @@ class ExchangeService {
           // Incrementar contador de intercambios completados para ambos usuarios
           transaction.update(
             _firestore.collection('users').doc(exchange.user1Id),
-            {'exchangesCompleted': FieldValue.increment(1)},
+            {
+              'exchangesCompleted': FieldValue.increment(1),
+              'articlesExchanged': FieldValue.increment(1),
+            },
           );
 
           transaction.update(
             _firestore.collection('users').doc(exchange.user2Id),
-            {'exchangesCompleted': FieldValue.increment(1)},
+            {
+              'exchangesCompleted': FieldValue.increment(1),
+              'articlesExchanged': FieldValue.increment(1),
+            },
           );
         } else if (isUser1 && !exchange.user1Confirmed) {
           // User1 confirma (poco probable ya que propone automáticamente confirmado)
