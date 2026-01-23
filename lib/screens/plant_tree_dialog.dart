@@ -34,6 +34,26 @@ class _PlantTreeDialogState extends State<PlantTreeDialog> {
 
   File? _selectedImage;
   bool _isSubmitting = false;
+  bool _isAdmin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAdminStatus();
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final userId = authService.currentUser?.uid;
+    if (userId != null) {
+      final userData = await _userService.getUserById(userId);
+      if (mounted && userData != null) {
+        setState(() {
+          _isAdmin = userData.isAdmin;
+        });
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -85,7 +105,7 @@ class _PlantTreeDialogState extends State<PlantTreeDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al seleccionar foto: ${e.toString()}'),
+            content: Text('Error al seleccionar imagen: ${e.toString()}'),
             backgroundColor: Colors.red,
           ),
         );
@@ -329,34 +349,72 @@ class _PlantTreeDialogState extends State<PlantTreeDialog> {
 
                   const SizedBox(height: 12),
 
-                  // Botones de foto
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isSubmitting ? null : _pickImage,
-                          icon: const Icon(Icons.camera_alt),
-                          label: const Text('Cámara'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.primary,
-                            side: const BorderSide(color: AppColors.primary),
+                  // Botones de imagen (admins pueden usar galería)
+                  if (_isAdmin) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isSubmitting ? null : _pickImage,
+                            icon: const Icon(Icons.camera_alt),
+                            label: const Text('Cámara'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: const BorderSide(color: AppColors.primary),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isSubmitting ? null : _pickFromGallery,
-                          icon: const Icon(Icons.photo_library),
-                          label: const Text('Galería'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.primary,
-                            side: const BorderSide(color: AppColors.primary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _isSubmitting ? null : _pickFromGallery,
+                            icon: const Icon(Icons.photo_library),
+                            label: const Text('Galería'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.blue,
+                              side: const BorderSide(color: Colors.blue),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Como administrador puedes subir desde galería',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
                       ),
-                    ],
-                  ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ] else ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isSubmitting ? null : _pickImage,
+                        icon: const Icon(Icons.camera_alt),
+                        label: const Text('Tomar Foto'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.primary),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Solo se permite tomar fotos en el momento para garantizar autenticidad',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
 
                   const SizedBox(height: 24),
 

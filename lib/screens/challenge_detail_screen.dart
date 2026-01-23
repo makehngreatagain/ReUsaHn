@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import '../models/challenge_model.dart';
 import '../models/challenge_completion_model.dart';
+import '../services/auth_service.dart';
+import '../services/user_service.dart';
 import '../services/challenge_service.dart';
 import '../utils/colors.dart';
 
@@ -22,9 +25,30 @@ class ChallengeDetailScreen extends StatefulWidget {
 
 class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
   final ChallengeService _challengeService = ChallengeService();
+  final UserService _userService = UserService();
   final ImagePicker _picker = ImagePicker();
   final List<File> _selectedImages = [];
   bool _isLoading = false;
+  bool _isAdmin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAdminStatus();
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final userId = authService.currentUser?.uid;
+    if (userId != null) {
+      final userData = await _userService.getUserById(userId);
+      if (mounted && userData != null) {
+        setState(() {
+          _isAdmin = userData.isAdmin;
+        });
+      }
+    }
+  }
 
   Future<void> _takePhoto() async {
     try {
@@ -45,6 +69,32 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error al tomar foto: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1080,
+        imageQuality: 85,
+      );
+
+      if (image != null) {
+        setState(() {
+          _selectedImages.add(File(image.path));
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al seleccionar imagen: $e'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -616,30 +666,72 @@ class _ChallengeDetailScreenState extends State<ChallengeDetailScreen> {
 
         const SizedBox(height: 16),
 
-        // Botón para tomar foto (solo cámara para evitar imágenes editadas)
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _takePhoto,
-            icon: const Icon(Icons.camera_alt),
-            label: const Text('Tomar Foto'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
-              padding: const EdgeInsets.symmetric(vertical: 14),
+        // Botones para agregar imagen (admins pueden usar galería)
+        if (_isAdmin) ...[
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _takePhoto,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Cámara'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _pickFromGallery,
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Galería'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.blue,
+                    side: const BorderSide(color: Colors.blue),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Como administrador puedes subir desde galería',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontStyle: FontStyle.italic,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ] else ...[
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _takePhoto,
+              icon: const Icon(Icons.camera_alt),
+              label: const Text('Tomar Foto'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Solo se permite tomar fotos en el momento para garantizar autenticidad',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey[600],
-            fontStyle: FontStyle.italic,
+          const SizedBox(height: 8),
+          Text(
+            'Solo se permite tomar fotos en el momento para garantizar autenticidad',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+              fontStyle: FontStyle.italic,
+            ),
+            textAlign: TextAlign.center,
           ),
-          textAlign: TextAlign.center,
-        ),
+        ],
 
         if (!progress.needsReview && !progress.canClaim)
           Padding(
