@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 import '../models/article_model.dart';
 import '../models/post_model.dart';
 import '../services/auth_service.dart';
@@ -29,6 +31,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   File? _selectedImage;
   ArticleCategory _selectedCategory = ArticleCategory.otros;
   bool _isLoading = false;
+  String? _location;
+  bool _isLoadingLocation = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+  }
 
   @override
   void dispose() {
@@ -36,6 +46,86 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     _descriptionController.dispose();
     _suggestionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _getCurrentLocation() async {
+    try {
+      // Verificar si el servicio de ubicación está habilitado
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() {
+          _location = null;
+          _isLoadingLocation = false;
+        });
+        return;
+      }
+
+      // Verificar permisos
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setState(() {
+            _location = null;
+            _isLoadingLocation = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        setState(() {
+          _location = null;
+          _isLoadingLocation = false;
+        });
+        return;
+      }
+
+      // Obtener posición actual
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+      );
+
+      // Convertir coordenadas a dirección
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+        // Construir la localidad (ciudad, departamento/estado)
+        String locationStr = '';
+        if (place.locality != null && place.locality!.isNotEmpty) {
+          locationStr = place.locality!;
+        }
+        if (place.administrativeArea != null && place.administrativeArea!.isNotEmpty) {
+          if (locationStr.isNotEmpty) {
+            locationStr += ', ${place.administrativeArea}';
+          } else {
+            locationStr = place.administrativeArea!;
+          }
+        }
+        if (locationStr.isEmpty && place.subAdministrativeArea != null) {
+          locationStr = place.subAdministrativeArea!;
+        }
+
+        setState(() {
+          _location = locationStr.isNotEmpty ? locationStr : null;
+          _isLoadingLocation = false;
+        });
+      } else {
+        setState(() {
+          _location = null;
+          _isLoadingLocation = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _location = null;
+        _isLoadingLocation = false;
+      });
+    }
   }
 
   Future<void> _pickImageFromGallery() async {
@@ -205,6 +295,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         status: PostStatus.pending,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
+        location: _location,
       );
 
       // Guardar en Firestore
@@ -258,6 +349,74 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // Ubicación actual
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.location_on,
+                    color: _location != null ? AppColors.primary : Colors.grey,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _isLoadingLocation
+                        ? Row(
+                            children: [
+                              SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Obteniendo ubicación...',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          )
+                        : Text(
+                            _location ?? 'Ubicación no disponible',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _location != null
+                                  ? AppColors.textPrimary
+                                  : Colors.grey[500],
+                              fontWeight: _location != null
+                                  ? FontWeight.w500
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                  ),
+                  if (!_isLoadingLocation && _location == null)
+                    IconButton(
+                      icon: const Icon(Icons.refresh, size: 20),
+                      onPressed: () {
+                        setState(() => _isLoadingLocation = true);
+                        _getCurrentLocation();
+                      },
+                      tooltip: 'Reintentar',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             // Título
             TextFormField(
               controller: _titleController,

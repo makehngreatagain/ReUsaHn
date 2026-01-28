@@ -502,9 +502,6 @@ class _AdminUsersWebScreenState extends State<AdminUsersWebScreen> {
 
   void _showEditUserDialog(UserModel user) {
     final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController(text: user.name);
-    final bioController = TextEditingController(text: user.bio);
-    final phoneController = TextEditingController(text: user.phone);
     final pointsController =
         TextEditingController(text: user.greenPoints.toString());
     String selectedRole = user.role;
@@ -522,49 +519,116 @@ class _AdminUsersWebScreenState extends State<AdminUsersWebScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Nombre *',
-                        hintText: 'Ingresa el nombre completo',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.person),
+                    // Información del usuario (solo lectura)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
                       ),
-                      validator: Validators.validateName,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r"[a-zA-ZáéíóúÁÉÍÓÚñÑ\s'-]")),
-                        LengthLimitingTextInputFormatter(50),
-                      ],
-                      textCapitalization: TextCapitalization.words,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                                backgroundImage: user.profileImageUrl.isNotEmpty
+                                    ? NetworkImage(user.profileImageUrl)
+                                    : null,
+                                child: user.profileImageUrl.isEmpty
+                                    ? Text(
+                                        user.name[0].toUpperCase(),
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.primary,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      user.name,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      user.email,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    if (user.phone.isNotEmpty)
+                                      Text(
+                                        user.phone,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (user.bio.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              user.bio,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[700],
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: bioController,
-                      decoration: const InputDecoration(
-                        labelText: 'Biografía',
-                        hintText: 'Información adicional (opcional)',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.info_outline),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.amber[50],
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber[200]!),
                       ),
-                      maxLines: 3,
-                      maxLength: 500,
-                      validator: Validators.validateBio,
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 20, color: Colors.amber[700]),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'La información personal solo puede ser modificada por el usuario desde su perfil.',
+                              style: TextStyle(fontSize: 12, color: Colors.amber[800]),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: 24),
+                    const Divider(),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: phoneController,
-                      decoration: const InputDecoration(
-                        labelText: 'Teléfono',
-                        hintText: '9999-9999 (Honduras)',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.phone),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Opciones de administrador',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
-                      keyboardType: TextInputType.phone,
-                      validator: Validators.validatePhone,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(8),
-                      ],
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -624,14 +688,6 @@ class _AdminUsersWebScreenState extends State<AdminUsersWebScreen> {
                 }
 
                 try {
-                  // Sanitizar y actualizar perfil
-                  await _userService.updateUserProfile(
-                    userId: user.id,
-                    name: Validators.sanitizeText(nameController.text),
-                    bio: Validators.sanitizeText(bioController.text),
-                    phone: Validators.cleanPhone(phoneController.text),
-                  );
-
                   // Actualizar puntos
                   await _userService.updateGreenPoints(
                     user.id,

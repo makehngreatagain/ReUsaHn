@@ -19,6 +19,7 @@ class PostModel {
   final DateTime? reviewedAt;    // Fecha de revisión
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? location;        // Localidad desde donde se publicó
 
   PostModel({
     required this.id,
@@ -31,6 +32,7 @@ class PostModel {
     this.reviewedAt,
     required this.createdAt,
     required this.updatedAt,
+    this.location,
   });
 
   // Convertir a JSON para Firestore
@@ -45,6 +47,7 @@ class PostModel {
       'reviewedAt': reviewedAt != null ? Timestamp.fromDate(reviewedAt!) : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'location': location,
     };
   }
 
@@ -81,6 +84,7 @@ class PostModel {
       reviewedAt: (json['reviewedAt'] as Timestamp?)?.toDate(),
       createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (json['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      location: json['location'] as String?,
     );
   }
 
@@ -104,6 +108,7 @@ class PostModel {
       reviewedAt: (json['reviewedAt'] as Timestamp?)?.toDate(),
       createdAt: (json['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (json['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      location: json['location'] as String?,
     );
   }
 
@@ -119,6 +124,7 @@ class PostModel {
     DateTime? reviewedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? location,
   }) {
     return PostModel(
       id: id ?? this.id,
@@ -131,6 +137,7 @@ class PostModel {
       reviewedAt: reviewedAt ?? this.reviewedAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      location: location ?? this.location,
     );
   }
 
